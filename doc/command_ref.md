@@ -402,6 +402,7 @@ values are shown in the last column.
 | `b_pll` | PLL bandwidth (Hz) | `5.0` | `10.0` |
 | `b_fll_w` | Wide FLL bandwidth (Hz) | `5.0` | `10.0` |
 | `b_fll_n` | Narrow FLL bandwidth (Hz) | `2.0` | `5.0` |
+| `b_fll_a` | FLL-assist bandwidth for the 3rd-order PLL (Hz) (`0`: off) | `2.0` | `2.0` |
 | `max_dop` | Acquisition Doppler limit (Hz) | `5000` | `10000` |
 | `thres_cn0_l` | Normal-acquisition lock threshold (dB-Hz) | `34.0` | `34.0` |
 | `thres_cn0_ext` | Assisted-acquisition threshold floor (dB-Hz) | `30.0` | `30.0` |

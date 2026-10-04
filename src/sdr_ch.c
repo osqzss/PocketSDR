@@ -38,6 +38,7 @@
 //  2026-07-19  1.25 add pre-combined E5ABQ replicas (a+b, a-b) to correlate
 //                   both sidebands in one pass once the polarity is calibrated
 //  2026-07-19  1.26 improve low-C/N0 acquisition and pilot tracking
+//  2026-10-04  1.27 add 2nd-order FLL assist to 3rd-order PLL (high dynamics)
 //
 #include <ctype.h>
 #include <math.h>
@@ -57,6 +58,9 @@
 #define B_PLL      5.0      // band-width of PLL filter (Hz)
 #define B_FLL_W    5.0      // band-width of FLL filter (Hz) (wide)
 #define B_FLL_N    2.0      // band-width of FLL filter (Hz) (narrow)
+#define B_FLL_A    2.0      // band-width of FLL assist for PLL (Hz) (0:off)
+#define THRES_SNR_FLL_C 11.0 // min C/N0*T (dB) for FLL assist (Costas)
+#define THRES_SNR_FLL 8.0   // min C/N0*T (dB) for FLL assist (non-Costas)
 #define MAX_DOP    5000.0   // max Doppler for acquisition (Hz)
 #define THRES_CN0_L 34.0    // C/N0 threshold (dB-Hz) (lock)
 #define THRES_CN0_U 25.0    // C/N0 threshold (dB-Hz) (lost)
@@ -90,6 +94,7 @@ double sdr_b_dll   = B_DLL;
 double sdr_b_pll   = B_PLL;
 double sdr_b_fll_w = B_FLL_W;
 double sdr_b_fll_n = B_FLL_N;
+double sdr_b_fll_a = B_FLL_A;
 double sdr_max_dop = MAX_DOP;
 double sdr_thres_cn0_l = THRES_CN0_L;
 double sdr_thres_cn0_u = THRES_CN0_U;
@@ -369,6 +374,8 @@ static sdr_trk_t *trk_new(const char *sig, int prn, const int8_t *code,
     trk->csk_ref = -1;
     trk->err_phas = trk->err_code = 0.0;
     trk->phas_acc = trk->code_int = 0.0;
+    trk->Cf[0] = trk->Cf[1] = 0.0f;
+    trk->dt_f = 0.0;
     trk->sumP = trk->sumN = trk->sumVE = trk->sumVL = 0.0;
     trk->sumPs = trk->sumD = 0.0;
     trk->Cs[0] = trk->Cs[1] = 0.0f;
@@ -500,6 +507,8 @@ static void trk_init(sdr_trk_t *trk)
 {
     trk->err_phas = trk->err_code = 0.0;
     trk->phas_acc = trk->code_int = 0.0;
+    trk->Cf[0] = trk->Cf[1] = 0.0f;
+    trk->dt_f = 0.0;
     trk->sec_sync = trk->sec_pol = 0;
     trk->csk_ref = -1;
     trk->sumP = trk->sumN = trk->sumVE = trk->sumVL = 0.0;
@@ -657,17 +666,30 @@ static void FLL(sdr_ch_t *ch)
     ch->trk->C0[1] = ch->trk->C[0][1];
 }
 
-// PLL (3rd-order, a3=1.1, b3=2.4, Bn=W/0.7845) --------------------------------
+// FLL-assisted PLL (3rd-order PLL + 2nd-order FLL, a2=1.414, Bn=Wf/0.53) ------
 static void PLL(sdr_ch_t *ch, double IP, double QP, double dt, int costas)
 {
     if (IP != 0.0 || (!costas && QP != 0.0)) {
         double err_phas = (costas ? atan(QP / IP) : atan2(QP, IP)) / DPI;
-        double W = sdr_b_pll / 0.7845;
-        ch->trk->phas_acc += W * W * W * err_phas * dt;
+        double err_freq = 0.0;
+        double IP0 = ch->trk->Cf[0], QP0 = ch->trk->Cf[1];
+        double dot = IP0 * IP + QP0 * QP, cross = IP0 * QP - QP0 * IP;
+        double snr = ch->cn0 + 10.0 * log10(dt); // C/N0 * dt (dB)
+        if (sdr_b_fll_a > 0.0 && ch->trk->dt_f == dt && dot != 0.0 &&
+            snr >= (costas ? THRES_SNR_FLL_C : THRES_SNR_FLL)) {
+            err_freq = (costas ? atan(cross / dot) : atan2(cross, dot)) /
+                (DPI * dt);
+        }
+        double W = sdr_b_pll / 0.7845, Wf = sdr_b_fll_a / 0.53;
+        ch->trk->phas_acc += (W * W * W * err_phas + Wf * Wf * err_freq) * dt;
         ch->fd += 2.4 * W * (err_phas - ch->trk->err_phas) +
-            1.1 * W * W * err_phas * dt + ch->trk->phas_acc * dt;
+            (1.1 * W * W * err_phas + 1.414 * Wf * err_freq) * dt +
+            ch->trk->phas_acc * dt;
         ch->trk->err_phas = err_phas;
     }
+    ch->trk->Cf[0] = IP;
+    ch->trk->Cf[1] = QP;
+    ch->trk->dt_f = dt;
 }
 
 // DLL (2nd-order, zeta=0.707, Bn=W/0.53) --------------------------------------
@@ -929,6 +951,7 @@ static void track_sig(sdr_ch_t *ch, double time, const sdr_buff_t *buff, int ix)
     if (ch->lock * ch->T <= T_FPULLIN) {
         FLL(ch);
         ch->trk->Cs[0] = ch->trk->Cs[1] = 0.0f;
+        ch->trk->Cf[0] = ch->trk->Cf[1] = 0.0f;
         ch->trk->coh_n = 0;
     } else if (ch->pilot && ch->trk->sec_sync > 0) {
         int K = MAX(1, (int)(sdr_t_coh / ch->T + 0.5));

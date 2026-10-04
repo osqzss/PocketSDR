@@ -195,6 +195,8 @@ typedef struct {                // signal tracking type
     double err_code;            // code error (chip)
     double phas_acc;            // 3rd-order PLL acceleration accumulator (Hz/s)
     double code_int;            // 2nd-order DLL integrator (s/s)
+    sdr_cpx_t Cf;               // previous prompt for FLL assist of PLL
+    double dt_f;                // integration time of previous prompt (s)
     double sumP, sumN, sumVE, sumVL; // sum of correlations
     double sumPs, sumD;         // sums for carrier lock detector
     sdr_cpx_t Cs;               // coherent prompt sum for pilot tracking

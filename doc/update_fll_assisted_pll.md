@@ -331,9 +331,9 @@ Table 6. Jerk that gives f_e = 50 Hz (T = 1 ms, range 250 Hz) and f_e = 5 Hz
 |---:|---:|---:|---:|---:|
 | 1  | 1.89  | 3.6   | 178 (3.5)     | 18 (0.35)   |
 | 2  | 3.77  | 14.2  | 712 (13.8)    | 71 (1.38)   |
-| 5  | 9.43  | 89.0  | 4450 (86.4)   | 445 (8.64)  |
+| 5  | 9.43  | 89.0  | 4450 (86.3)   | 445 (8.63)  |
 | 10 | 18.87 | 356.0 | 17800 (345.4) | 1780 (34.5) |
-| 15 | 28.30 | 801.0 | 40050 (777.2) | 4005 (77.7) |
+| 15 | 28.30 | 801.0 | 40050 (777.1) | 4005 (77.7) |
 
 Note that in frequency-lock-only mode (phase not locked) carrier phase and
 navigation data are degraded, while Doppler and code tracking continue.
@@ -392,6 +392,24 @@ random seed 1. The model has no code loop, no data bits, no oscillator noise
 and uses the true C/N0 for the gate. Analytic values were checked first:
 Bn of the 3rd-order PLL = 5.00 Hz for Bp = 5, Bn of the 2nd-order FLL =
 2.00 Hz for Bf = 2.
+
+All tables in Sections 3 to 5 are reproduced by
+[test/python/fll_assisted_pll_ana.py](../test/python/fll_assisted_pll_ana.py):
+
+```
+python3 test/python/fll_assisted_pll_ana.py [bw|step|pll|fll|fllnoise|stab|jitter|jerk|all]
+```
+
+| Command | Output |
+|---|---|
+| `bw` | Table 3 (effective Bn, damping) |
+| `step` | Table 5 (acceleration step tolerance) |
+| `pll` | Table 4 (PLL jerk limit) |
+| `fll` | Table 6 (FLL jerk vs. frequency error) |
+| `fllnoise` | FLL thermal noise (Section 4.2) |
+| `stab` | Table 8 (discrete-time stability) |
+| `jitter` | Table 7 (Monte Carlo phase jitter) |
+| `jerk` | Section 5.3 (Monte Carlo jerk tolerance) |
 
 ### 5.2 Phase jitter without dynamics (no gate)
 
@@ -471,6 +489,7 @@ Observations:
 | `src/sdr_rcv.c` | `sdr_rcv_setopt()`: add option `b_fll_a` |
 | `app/pocket_trk/pocket_trk_default.conf` | add `b_fll_a = 2.0` |
 | `doc/command_ref.md` | add `b_fll_a` |
+| `test/python/fll_assisted_pll_ana.py` | analysis script for this document |
 
 Option:
 
